@@ -1,100 +1,196 @@
-import requests
-import pandas as pd
-import time
+from flask import Flask, request, jsonify
+import torch
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
+import os
 
-API_KEY = "" 
-BASE_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
+app = Flask(__name__)
 
-def fetch_nvd_data(start_index=1, results_per_page=2000, max_pages=1):
-    all_cves = []
-    for page in range(max_pages):
-        params = {
-            "startIndex": start_index + page * results_per_page,
-            "resultsPerPage": results_per_page,
-            "pubStartDate": "2024-08-04T00:00:00.000",
-            "pubEndDate": "2024-10-22T00:00:00.000",
-        }
-        headers = {"apiKey": API_KEY} if API_KEY else {}
+def load_label_map(path):
+    label_map = {}
+    with open(path, "r") as f:
+        for line in f:
+            k, v = line.strip().split(":")
+            label_map[int(v)] = k
+    return label_map
 
-        print(f"[INFO] Fetching page {page + 1}...")
-        response = requests.get(BASE_URL, headers=headers, params=params)
-        if response.status_code != 200:
-            print(f"[ERROR] Status {response.status_code}: {response.text}")
-            break
+def predict_metric(description, metric_name, models_dir="./cvss_models"):
+    model_path = f"{models_dir}/{metric_name}"
+    
+    # Load model and tokenizer
+    model = AutoModelForSequenceClassification.from_pretrained(model_path)
+    tokenizer = AutoTokenizer.from_pretrained(model_path)
+    model.eval()
 
-        data = response.json()
-        cves = data.get("vulnerabilities", [])
-        all_cves.extend(cves)
+    # Load label mapping
+    label_map = load_label_map(f"{model_path}/label_map.txt")
+    
+    # Tokenization
+    inputs = tokenizer(description, return_tensors="pt", truncation=True, padding=True)
+    
+    # Prediction
+    with torch.no_grad():
+        outputs = model(**inputs)
+        predicted_id = torch.argmax(outputs.logits, dim=1).item()
 
-        # throttle requests to avoid hitting the API rate limit
-        time.sleep(3)
-    return all_cves
+    return label_map[predicted_id]
 
+CVSS_METRICS = ["AV", "AC", "PR", "UI", "VC", "VI", "VA", "SC", "SI", "SA"]
 
-def process_cves_to_dataframe(cves_raw):
-    """
-    DataFrame containing processed CVE data with CVSSv4 metrics
-    """
-    processed = []
+def predict_all_metrics(description, models_dir="./cvss_models"):
+    results = {}
+    for metric in CVSS_METRICS:
+        try:
+            value = predict_metric(description, metric, models_dir)
+            results[metric] = value
+        except Exception as e:
+            results[metric] = f"Error: {e}"
+    return results
 
-    for item in cves_raw:
-        cve = item.get("cve", {})
-        id = cve.get("id")
-        description = cve.get("descriptions", [{}])[0].get("value", "")
-        metrics = cve.get("metrics", {})
-        cvss_v4 = metrics.get("cvssMetricV40", [{}])[0] if "cvssMetricV40" in metrics else None
-
-        # Skip items without CVSSv4 data
-        if not cvss_v4:
-            continue
-
-        processed.append({
-            "cve_id": id,
-            "description": description,
-            "baseScore": cvss_v4.get("cvssData", {}).get("baseScore"),
-            "baseSeverity": cvss_v4.get("cvssData", {}).get("baseSeverity"),
-            "vectorString": cvss_v4.get("cvssData", {}).get("vectorString"),
-            "attackVector": cvss_v4.get("cvssData", {}).get("attackVector"),
-            "attackComplexity": cvss_v4.get("cvssData", {}).get("attackComplexity"),
-            "attackRequirements": cvss_v4.get("cvssData", {}).get("attackRequirements"),
-            "privilegesRequired": cvss_v4.get("cvssData", {}).get("privilegesRequired"),
-            "userInteraction": cvss_v4.get("cvssData", {}).get("userInteraction"),
-            "vulnConfidentialityImpact": cvss_v4.get("cvssData", {}).get("vulnConfidentialityImpact"),
-            "vulnIntegrityImpact": cvss_v4.get("cvssData", {}).get("vulnIntegrityImpact"),
-            "vulnAvailabilityImpact": cvss_v4.get("cvssData", {}).get("vulnAvailabilityImpact"),
-            "subConfidentialityImpact": cvss_v4.get("cvssData", {}).get("subConfidentialityImpact"),
-            "subIntegrityImpact": cvss_v4.get("cvssData", {}).get("subIntegrityImpact"),
-            "subAvailabilityImpact": cvss_v4.get("cvssData", {}).get("subAvailabilityImpact"),
-            "exploitMaturity": cvss_v4.get("cvssData", {}).get("exploitMaturity"),
-            "confidentialityRequirement": cvss_v4.get("cvssData", {}).get("confidentialityRequirement"),
-            "integrityRequirement": cvss_v4.get("cvssData", {}).get("integrityRequirement"),
-            "availabilityRequirement": cvss_v4.get("cvssData", {}).get("availabilityRequirement"),
-            "modifiedAttackVector": cvss_v4.get("cvssData", {}).get("modifiedAttackVector"),
-            "modifiedAttackComplexity": cvss_v4.get("cvssData", {}).get("modifiedAttackComplexity"),
-            "modifiedAttackRequirements": cvss_v4.get("cvssData", {}).get("modifiedAttackRequirements"),
-            "modifiedPrivilegesRequired": cvss_v4.get("cvssData", {}).get("modifiedPrivilegesRequired"),
-            "modifiedUserInteraction": cvss_v4.get("cvssData", {}).get("modifiedUserInteraction"),
-            "modifiedVulnConfidentialityImpact": cvss_v4.get("cvssData", {}).get("modifiedVulnConfidentialityImpact"),
-            "modifiedVulnIntegrityImpact": cvss_v4.get("cvssData", {}).get("modifiedVulnIntegrityImpact"),
-            "modifiedVulnAvailabilityImpact": cvss_v4.get("cvssData", {}).get("modifiedVulnAvailabilityImpact"),
-            "modifiedSubConfidentialityImpact": cvss_v4.get("cvssData", {}).get("modifiedSubConfidentialityImpact"),
-            "modifiedSubIntegrityImpact": cvss_v4.get("cvssData", {}).get("modifiedSubIntegrityImpact"),
-            "modifiedSubAvailabilityImpact": cvss_v4.get("cvssData", {}).get("modifiedSubAvailabilityImpact"),
-            "Safety": cvss_v4.get("cvssData", {}).get("Safety"),
-            "Automatable": cvss_v4.get("cvssData", {}).get("Automatable"),
-            "Recovery": cvss_v4.get("cvssData", {}).get("Recovery"),
-            "valueDensity": cvss_v4.get("cvssData", {}).get("valueDensity"),
-            "vulnerabilityResponseEffort": cvss_v4.get("cvssData", {}).get("vulnerabilityResponseEffort"),
-            "providerUrgency": cvss_v4.get("cvssData", {}).get("providerUrgency"),
+@app.route('/api/predict', methods=['POST'])
+def predict_cvss():
+    try:
+        # Get description from request
+        data = request.get_json()
+        
+        if not data or 'description' not in data:
+            return jsonify({'error': 'Description is required'}), 400
+        
+        description = data['description']
+        
+        if not description.strip():
+            return jsonify({'error': 'Description cannot be empty'}), 400
+        
+        # Get models directory from request or use default
+        models_dir = data.get('models_dir', './cvss_models')
+        
+        # Check if models directory exists
+        if not os.path.exists(models_dir):
+            return jsonify({'error': f'Models directory not found: {models_dir}'}), 404
+        
+        # Predict all metrics
+        results = predict_all_metrics(description, models_dir)
+        
+        return jsonify({
+            'description': description,
+            'cvss_flags': results,
+            'status': 'success'
         })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
-    df = pd.DataFrame(processed)
-    return df
+@app.route('/api/predict/metric', methods=['POST'])
+def predict_single_metric():
+    try:
+        # Get data from request
+        data = request.get_json()
+        
+        if not data or 'description' not in data or 'metric' not in data:
+            return jsonify({'error': 'Description and metric are required'}), 400
+        
+        description = data['description']
+        metric = data['metric']
+        
+        if not description.strip():
+            return jsonify({'error': 'Description cannot be empty'}), 400
+        
+        if metric not in CVSS_METRICS:
+            return jsonify({'error': f'Invalid metric. Valid metrics: {CVSS_METRICS}'}), 400
+        
+        # Get models directory from request or use default
+        models_dir = data.get('models_dir', './cvss_models')
+        
+        # Check if models directory exists
+        if not os.path.exists(models_dir):
+            return jsonify({'error': f'Models directory not found: {models_dir}'}), 404
+        
+        # Predict single metric
+        result = predict_metric(description, metric, models_dir)
+        
+        return jsonify({
+            'description': description,
+            'metric': metric,
+            'value': result,
+            'status': 'success'
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
-if __name__ == "__main__":
-    raw_cves = fetch_nvd_data(max_pages=5) 
-    df_cves = process_cves_to_dataframe(raw_cves)
+@app.route('/api/metrics/all', methods=['GET'])
+def get_all_metrics_info():
+    """Return detailed information about all CVSS metrics"""
+    metrics_info = {
+        "AV": {
+            "name": "Attack Vector",
+            "description": "Reflects the context by which vulnerability exploitation is possible",
+            "values": ["N", "A", "L", "P"]
+        },
+        "AC": {
+            "name": "Attack Complexity", 
+            "description": "Describes the conditions beyond the attacker's control",
+            "values": ["L", "H"]
+        },
+        "PR": {
+            "name": "Privileges Required",
+            "description": "Describes the level of privileges an attacker must possess",
+            "values": ["N", "L", "H"]
+        },
+        "UI": {
+            "name": "User Interaction",
+            "description": "Captures the requirement for a human user to participate in the attack",
+            "values": ["N", "R"]
+        },
+        "VC": {
+            "name": "Vulnerability Confidentiality Impact",
+            "description": "Measures the impact to the confidentiality of the information",
+            "values": ["N", "L", "H"]
+        },
+        "VI": {
+            "name": "Vulnerability Integrity Impact", 
+            "description": "Measures the impact to integrity of a successfully exploited vulnerability",
+            "values": ["N", "L", "H"]
+        },
+        "VA": {
+            "name": "Vulnerability Availability Impact",
+            "description": "Measures the impact to the availability of the impacted component",
+            "values": ["N", "L", "H"]
+        },
+        "SC": {
+            "name": "Subsequent Confidentiality Impact",
+            "description": "Measures the impact to the confidentiality of the subsequent system",
+            "values": ["N", "L", "H"]
+        },
+        "SI": {
+            "name": "Subsequent Integrity Impact",
+            "description": "Measures the impact to the integrity of the subsequent system", 
+            "values": ["N", "L", "H"]
+        },
+        "SA": {
+            "name": "Subsequent Availability Impact",
+            "description": "Measures the impact to the availability of the subsequent system",
+            "values": ["N", "L", "H"]
+        }
+    }
+    
+    return jsonify({
+        "total_metrics": len(CVSS_METRICS),
+        "metrics": metrics_info,
+        "status": "success"
+    })
 
-    print(df_cves.head())
-    df_cves.to_csv("nvd_cvss4_data.csv", index=False)
-    print("[INFO] Dane zapisane do pliku 'nvd_cvss4_data.csv'")
+@app.route('/api/predict/all', methods=['POST'])
+def predict_all_cvss_metrics():
+    """Alternative endpoint name for predicting all metrics"""
+    return predict_cvss()
+
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    return jsonify({'status': 'healthy', 'message': 'CVSS Prediction API is running'})
+
+@app.route('/api/metrics', methods=['GET'])
+def get_available_metrics():
+    return jsonify({'available_metrics': CVSS_METRICS})
+
+if __name__ == '__main__':
+    app.run(debug=True, host='0.0.0.0', port=3000)
