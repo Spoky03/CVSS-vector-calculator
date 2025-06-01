@@ -40,7 +40,7 @@ METRIC_TO_COLUMN = {
     "VA": "vulnAvailabilityImpact",
     "SC": "subConfidentialityImpact",
     "SI": "subIntegrityImpact",
-    "SA": "subAvailabitilyImpact",
+    "SA": "subAvailabilityImpact",
 }
 
 # Training params
