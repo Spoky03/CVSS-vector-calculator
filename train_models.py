@@ -13,7 +13,7 @@ import torch
 CSV_PATH = "nvd_cvss4_data.csv"
 TEXT_COLUMN = "description"
 
-CVSS_METRICS = ["AV", "AC", "PR", "UI", "VC", "VI", "VA", "SC", "SI", "SA"]
+CVSS_METRICS = ["AV", "AC", "AT", "PR", "UI", "VC", "VI", "VA", "SC", "SI", "SA"]
 
 METRIC_LABELS = {
     "AV": ["N", "A", "L", "P"],
@@ -62,8 +62,31 @@ tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 
 df = pd.read_csv(CSV_PATH)
 
+overwrite = "n"
+
+for metric in CVSS_METRICS:
+    save_path = f"{OUTPUT_DIR}/{metric}"
+    if os.path.exists(save_path):
+        s = input("Some models exist. Do you want to overwrite ALL OF them? [y]es/[N]o/[c]hoose: ")
+        if len(s) < 1:
+            break
+        if s.lower()[0] == "y":
+            overwrite = "y"
+        if s.lower()[0] == "c":
+            overwrite = "c"
+        break
+
 # Training for each metric
 for metric in CVSS_METRICS:
+    save_path = f"{OUTPUT_DIR}/{metric}"
+    if os.path.exists(save_path):
+        if overwrite == "n":
+            continue
+        if overwrite == "c":
+            s = input(f"\nOverwrite {metric} model? [y/N]: ")
+            if len(s) < 1 or s.lower()[0] != "y":
+                continue
+
     print(f"\nTraining model for {metric} metric")
 
     metric_col = METRIC_TO_COLUMN[metric]
