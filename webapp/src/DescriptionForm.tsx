@@ -66,8 +66,8 @@ export function DescriptionForm({setLoading, setResponseData} : {
             control={form.control}
             name="description"
             render={({ field }) => (
-              <FormItem className="space-y-2">
-                <FormLabel>Description</FormLabel>
+              <FormItem className="space-y-2 mt-4">
+                <FormLabel className="hidden">Description</FormLabel>
                 <FormControl>
                   <Input placeholder="A vulnerability..." {...field} />
                 </FormControl>
