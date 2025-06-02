@@ -13,9 +13,9 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
 import { postRequest } from "./lib/requests";
 import type { PredictionResponse } from "./lib/interfaces";
+import { Textarea } from "./components/ui/textarea";
 const formSchema = z.object({
   description: z.string().min(10, {
     message: "Description must be at least 10 characters.",
@@ -69,7 +69,11 @@ export function DescriptionForm({setLoading, setResponseData} : {
               <FormItem className="space-y-2 mt-4">
                 <FormLabel className="hidden">Description</FormLabel>
                 <FormControl>
-                  <Input placeholder="A vulnerability..." {...field} />
+                  <Textarea
+                    placeholder="Describe the vulnerability in detail..."
+                    {...field}
+                    className="resize-none h-48"
+                  />
                 </FormControl>
                 <FormDescription>
                   Provide a detailed description of the vulnerability.
