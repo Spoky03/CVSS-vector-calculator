@@ -3,3 +3,9 @@
 
 modify file `/src/lib/contants.ts` line
 `export const API_URL = 'https://zmtqkfz1-3000.euw.devtunnels.ms/api'` with proper backend address
+
+start developer serer
+```sh
+npm i
+npm run dev
+```
