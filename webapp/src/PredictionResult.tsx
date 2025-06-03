@@ -52,7 +52,7 @@ export const PredictionResult = ({
       AV: { N: "Network", A: "Adjacent", L: "Local", P: "Physical" },
       AC: { L: "Low", H: "High" },
       PR: { N: "None", L: "Low", H: "High" },
-      UI: { N: "None", R: "Required" },
+      UI: { N: "None", R: "Required", A: "Active" },
       VC: { N: "None", L: "Low", H: "High" },
       VI: { N: "None", L: "Low", H: "High" },
       VA: { N: "None", L: "Low", H: "High" },

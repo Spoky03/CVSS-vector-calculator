@@ -140,7 +140,7 @@ def get_all_metrics_info():
         "UI": {
             "name": "User Interaction",
             "description": "Captures the requirement for a human user to participate in the attack",
-            "values": ["N", "R"]
+            "values": ["N", "R", "A"]
         },
         "VC": {
             "name": "Vulnerability Confidentiality Impact",

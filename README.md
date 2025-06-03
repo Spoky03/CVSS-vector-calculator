@@ -1,5 +1,11 @@
 # CVSS Vector Calculator/Prediction app
 
+<!-- ![Grafika 1](screenshots/1.png "blabla") -->
+<figure>
+<center><img src="model_accuracy.png" width="1200"></center>
+<figcaption>Heatmapa</figcaption>
+</figure>
+
 1. Train models with
    ```sh
    python install -r requirements.txt
